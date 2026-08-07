@@ -1,0 +1,38 @@
+# python
+__pycache__/
+.venv/
+*.pyc
+
+# data + tokenizers (regenerate with data/prepare.py)
+data/*.bin
+data/*.txt
+data/*.json
+
+# training outputs
+runs/
+
+# generated firmware artifacts (regenerate with src/export.py, src/gen_assets.py)
+firmware/model/model.bin
+firmware/model/golden.npz
+firmware/model/golden.txt
+firmware/esp32_llm/vocab.h
+
+# raw video / recordings (demo footage — keep out of the repo)
+video/
+videos/
+*.mp4
+*.mov
+*.MOV
+*.MP4
+
+# jetson CUDA build artifacts
+firmware/jetson/verify_cuda
+firmware/jetson/bench_cuda
+firmware/jetson/generate_cuda
+firmware/jetson/vocab.h
+firmware/jetson/check_tok
+firmware/jetson/tok_ref.txt
+
+# samples build artifacts
+samples/cpu/matvec_ladder
+samples/cpu/numerics

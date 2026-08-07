@@ -1,0 +1,21 @@
+# Toolchain cho pipeline PyTorch (prepare -> train -> quantize -> export).
+# Chạy trong container để KHÔNG cài gì lên host.
+#
+# Build:
+#   docker build -f firmware/jetson/Dockerfile.train -t esp32-llm-train .
+#
+# Chạy (mount repo, dùng GPU host):
+#   docker run --rm --gpus all -v "$PWD":/work -w /work esp32-llm-train \
+#       python data/prepare.py --vocab 4096
+#
+# Ghi chú: image pytorch chính thức đã có torch+cuda; chỉ thêm 3 gói nhỏ mà
+# pyproject.toml yêu cầu. Không đụng driver host -- container dùng driver của
+# host qua nvidia runtime, đó là cách nó vốn hoạt động.
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+
+RUN pip install --no-cache-dir "numpy>=1.26" "requests>=2.31" "tokenizers>=0.20" "tqdm>=4.66"
+
+# src/ import lẫn nhau bằng tên phẳng (`from model import ...`), nên phải chạy
+# với cwd=src hoặc đặt PYTHONPATH.
+ENV PYTHONPATH=/work/src
+WORKDIR /work

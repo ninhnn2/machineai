@@ -1,0 +1,165 @@
+LỘ TRÌNH NỀN TẢNG AI EMBEDDED
+
+Mục tiêu: Hiểu bản chất của AI để có thể đọc model.py, TensorRT, ONNX
+Runtime, TIDL, CUDA, DSP và NPU runtime.
+
+============================================================ 1. VECTOR —
+DỮ LIỆU TRONG AI
+============================================================
+
+Mục tiêu: - Hiểu mọi dữ liệu trong AI cuối cùng đều được biểu diễn bằng
+vector.
+
+Các chủ đề:
+
+1.1 Vector là gì? - Vector trong toán - Vector trong lập trình
+(float[]) - Magnitude - Direction
+
+1.2 Vector biểu diễn gì trong AI? - Word Embedding - Token Embedding -
+Hidden State - Feature Vector - Image Feature - Audio Feature
+
+1.3 Khoảng cách giữa các vector - Euclidean Distance - Cosine
+Similarity - Dot Product - Khi nào dùng từng loại
+
+1.4 Projection - Chiếu vector - Thành phần song song - Thành phần vuông
+góc
+
+1.5 Tensor - Scalar - Vector - Matrix - Tensor 3D - Tensor 4D
+
+============================================================ 2. WEIGHT —
+KIẾN THỨC CỦA MÔ HÌNH
+============================================================
+
+Mục tiêu: - Hiểu weight là tham số được học từ dữ liệu.
+
+Các chủ đề:
+
+2.1 Weight là gì? - Coefficient - Learned Parameter - So sánh với FIR
+coefficient
+
+2.2 Bias - Ý nghĩa của bias - Công thức y = Wx + b
+
+2.3 Weight được lưu ở đâu? - Flash - RAM - DDR - SRAM - GPU Memory
+
+2.4 Khởi tạo Weight - Random - Xavier - Kaiming - Tại sao không khởi tạo
+bằng 0
+
+2.5 Weight thay đổi như thế nào? - Gradient - Learning Rate -
+Optimizer - Update Weight
+
+2.6 Weight trong Transformer - Embedding Table - Q Weight - K Weight - V
+Weight - MLP Weight
+
+2.7 Quantization - FP32 - FP16 - INT8 - INT4
+
+============================================================ 3. MATRIX
+MULTIPLICATION
+============================================================
+
+Mục tiêu: - Hiểu GEMM là phép toán quan trọng nhất trong AI.
+
+Các chủ đề:
+
+3.1 Dot Product
+
+3.2 Matrix × Vector
+
+3.3 Matrix × Matrix
+
+3.4 Linear Layer - nn.Linear - GEMM
+
+3.5 Convolution - im2col - GEMM
+
+3.6 Attention - QK^T - Matrix Multiplication
+
+3.7 Complexity - FLOPs - O(n²) - O(n³)
+
+3.8 Hardware - GEMM - BLAS - cuBLAS - Tensor Core - DSP MAC - NPU Matrix
+Engine
+
+3.9 Cache Optimization - Cache Blocking - Tiling - SIMD - Prefetch
+
+============================================================ 4. GRADIENT
+============================================================
+
+Mục tiêu: - Hiểu gradient là hướng giúp mô hình cập nhật weight.
+
+Các chủ đề:
+
+4.1 Loss Function - Cross Entropy - MSE
+
+4.2 Derivative - Đạo hàm - Ý nghĩa vật lý
+
+4.3 Gradient - dLoss / dWeight
+
+4.4 Gradient Descent
+
+4.5 Learning Rate
+
+4.6 Optimizer - SGD - Adam - AdamW
+
+4.7 Vanishing Gradient
+
+4.8 Exploding Gradient
+
+============================================================ 5.
+BACKPROPAGATION
+============================================================
+
+Mục tiêu: - Hiểu loss.backward() thực sự làm gì.
+
+Các chủ đề:
+
+5.1 Computational Graph
+
+5.2 Chain Rule
+
+5.3 Forward Pass
+
+5.4 Backward Pass
+
+5.5 Gradient qua từng Layer
+
+5.6 PyTorch Autograd
+
+5.7 optimizer.step()
+
+============================================================ SAU KHI
+XONG 5 CHỦ ĐỀ
+============================================================
+
+Có thể đọc và hiểu:
+
+-   Embedding
+-   Linear Layer
+-   Attention
+-   Residual Connection
+-   RMSNorm
+-   SwiGLU
+-   MLP
+-   Logits
+
+============================================================ GIAI ĐOẠN
+TIẾP THEO ============================================================
+
+6.  Embedding
+7.  Positional Encoding (RoPE)
+8.  Self Attention
+9.  Multi-Head Attention
+10. RMSNorm
+11. SwiGLU
+12. Residual Connection
+13. Decoder Block
+14. KV Cache
+15. Token Sampling
+16. Quantization
+17. TensorRT / ONNX Runtime / TIDL
+18. Vision-Language-Action (VLA) cho Robot
+
+Khuyến nghị:
+
+-   70% thời gian: Hiểu bản chất toán học và thuật toán.
+-   30% thời gian: Đọc code PyTorch, runtime và tối ưu trên DSP/NPU/GPU.
+
+Mục tiêu cuối cùng: Hiểu toàn bộ pipeline AI Embedded từ Training →
+Export → Quantization → Deployment → Runtime Optimization.
