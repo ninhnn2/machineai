@@ -152,8 +152,16 @@ hiểu đúng ngay:
 
 ### Thực hành 1 — nhìn một embedding thật đã học được nghĩa
 
-**Chuẩn bị trước (bắt buộc, làm một lần).** Cả tokenizer lẫn checkpoint đều nằm
-trong `.gitignore` — clone về là **không có sẵn**, phải tự sinh:
+**Chuẩn bị trước.** Hai file mà script dưới đây cần đều **đã được commit sẵn trong
+repo**, clone về là chạy được ngay, không phải train lại:
+
+```
+data/bpe4096.json          tokenizer BPE 4096 từ vựng
+runs/ple-jetson-s0.pt      checkpoint đã train (14 MB)
+```
+
+Nếu bạn muốn **tự sinh lại** — để đổi cấu hình, hoặc chỉ để xem quá trình train diễn
+ra thế nào — thì hai lệnh sau tạo ra đúng hai file trên:
 
 ```bash
 # ở thư mục gốc repo
@@ -164,11 +172,12 @@ cd src && uv run python train.py --arm ple --vocab 4096 \
 
 Đây đúng là hai bước `prepare` + `train` trong [`firmware/jetson/run.sh`](../../firmware/jetson/run.sh),
 chỉ bỏ phần container. Không cần GPU NVIDIA: [`train.py:20`](../../src/train.py#L20)
-tự chọn **MPS** trên máy Mac Apple Silicon, `cuda` nếu có, không thì CPU. Thiếu bước
-này, script dưới đây báo `Exception: No such file or directory (os error 2)` ngay ở
-dòng `Tokenizer.from_file`.
+tự chọn **MPS** trên máy Mac Apple Silicon, `cuda` nếu có, không thì CPU. Đo thật:
+21,3 phút trên MacBook Pro M3. Nếu chạy script mà gặp
+`Exception: No such file or directory (os error 2)` ở dòng `Tokenizer.from_file`, tức
+là bạn đang thiếu đúng hai file trên — chạy lại hai lệnh này.
 
-Xong rồi thì lấy embedding của vài từ và đo độ giống nhau (§1.3):
+Lấy embedding của vài từ và đo độ giống nhau (§1.3):
 
 ```bash
 cd src && uv run python3 - <<'EOF'
