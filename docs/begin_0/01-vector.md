@@ -183,6 +183,13 @@ print("embedding shape:", tuple(emb.shape))
 def tid(w): return tok.encode(" " + w).ids[0]
 def cos(a, b): return F.cosine_similarity(emb[a:a+1], emb[b:b+1]).item()
 
+# --- nhìn tận mắt MỘT vector, trước khi đo nó ---
+torch.set_printoptions(precision=4, sci_mode=False, linewidth=88)
+i = tid("cat")
+print("token id =", i)
+print(emb[i][:16])                                  # 16 trong 128 chiều
+print(f"magnitude = {emb[i].norm():.4f}   std = {emb[i].std():.4f}")
+
 pairs = [("cat","dog"), ("cat","puppy"), ("king","queen"), ("happy","sad"),
          ("cat","the"), ("cat","king")]
 for a, b in pairs:
@@ -190,24 +197,47 @@ for a, b in pairs:
 EOF
 ```
 
-Kết quả đo được thật:
+Kết quả đo được thật — một lần chạy duy nhất, trên MacBook Pro M3 (MPS):
 
 ```
-cat    vs dog   : cos = +0.705
-cat    vs puppy : cos = +0.477
-king   vs queen : cos = +0.726
+embedding shape: (4096, 128)
+token id = 708
+tensor([ 0.1700, -0.1482, -0.0753,  0.0389,  0.0437,  0.0198, -0.0931, -0.0767, -0.1027,
+        -0.0491, -0.0514, -0.0627,  0.1532,  0.0520, -0.1667,  0.0285])
+magnitude = 0.8086   std = 0.0710
+cat    vs dog   : cos = +0.704
+cat    vs puppy : cos = +0.498
+king   vs queen : cos = +0.694
 happy  vs sad   : cos = +0.616
-cat    vs the   : cos = -0.132
-cat    vs king  : cos = +0.222
+cat    vs the   : cos = -0.137
+cat    vs king  : cos = +0.249
 ```
 
-Số của bạn sẽ **không trùng tới chữ số thứ ba**, kể cả khi dùng đúng `--seed 0`. Đo
-lại chính công thức trên bằng MPS (MacBook Pro M3) thay vì CUDA, cùng seed, cùng
-2000 bước: `cat/dog +0.704`, `king/queen +0.694`, `happy/sad +0.616`,
-`cat/the −0.137` — lệch tới 0.032 ở cặp lệch nhiều nhất. Thứ tự phép cộng float khác
-nhau giữa các backend là đủ để gây ra chừng đó. Cái **tái lập được** là thứ hạng và
-dấu của 6 cặp, không phải giá trị tuyệt đối; đọc embedding luôn phải đọc theo kiểu
-so sánh tương đối như vậy.
+**Dừng lại ở 16 số đầu tiên đó một chút.** Đấy là toàn bộ những gì model biết về
+token `cat` ở tầng embedding — không có từ điển, không có luật, không có `if`. 128
+số float, hết. Ba điều đọc được ngay từ chúng:
+
+- **Giá trị nhỏ và quanh 0** (std 0.071, biên độ ±0.18). Đúng như mong đợi: chúng
+  khởi tạo từ `nn.init.normal_` rồi bị gradient descent nắn dần, chứ không ai gán
+  tay. Không có số nào "đặc biệt" cả.
+- **Từng số riêng lẻ vô nghĩa với con người.** `emb[708][0] = +0.1700` không nói lên
+  điều gì — đúng như đã cảnh báo ở §1.2, chiều thứ 0 không tên, và nghĩa của `cat`
+  trải trên cả 128 chiều chứ không nằm ở chiều nào.
+- **Cả vector thì có nghĩa.** `magnitude = 0.8086` là độ dài của mũi tên này trong
+  không gian 128 chiều (§1.1) — và chính hướng của nó, chứ không phải độ dài, là thứ
+  làm `cos(cat, dog) = +0.704` ở ngay dưới.
+
+Từ đây trở đi, **mọi thứ transformer làm đều chỉ là biến đổi những vector như thế
+này**: Linear chiếu nó (§1.4), Attention so nó với các vector khác bằng dot product
+(§1.3), RMSNorm chia nó cho độ lớn của chính nó (§1.1). Không có bước nào quay lại
+với chữ `c-a-t` nữa — chuỗi ký tự chết ngay tại bảng embedding, và từ đó chỉ còn số.
+
+Số của bạn sẽ **không trùng tới chữ số thứ ba**, kể cả khi dùng đúng `--seed 0`. Lần
+train gốc của tài liệu này chạy trên CUDA cho `cat/dog +0.705`, `king/queen +0.726`,
+`cat/king +0.222` — so với bảng MPS ở trên thì lệch tới **0.032** ở cặp lệch nhiều
+nhất. Chỉ cần thứ tự phép cộng float khác nhau giữa hai backend là đủ. Cái **tái lập
+được** ở đây là thứ hạng và dấu của 6 cặp, không phải giá trị tuyệt đối; đọc
+embedding luôn phải đọc theo kiểu so sánh tương đối như vậy.
 
 Đọc kết quả: `cat`/`dog` gần nhau (cùng là động vật nuôi, xuất hiện trong ngữ cảnh
 giống nhau). `cat`/`the` gần như trực giao, còn hơi âm — một từ nội dung (content
