@@ -220,12 +220,22 @@ số float, hết. Ba điều đọc được ngay từ chúng:
 - **Giá trị nhỏ và quanh 0** (std 0.071, biên độ ±0.18). Đúng như mong đợi: chúng
   khởi tạo từ `nn.init.normal_` rồi bị gradient descent nắn dần, chứ không ai gán
   tay. Không có số nào "đặc biệt" cả.
-- **Từng số riêng lẻ vô nghĩa với con người.** `emb[708][0] = +0.1700` không nói lên
-  điều gì — đúng như đã cảnh báo ở §1.2, chiều thứ 0 không tên, và nghĩa của `cat`
-  trải trên cả 128 chiều chứ không nằm ở chiều nào.
+- **Từng số riêng lẻ vô nghĩa với con người.** `emb[708][1] = -0.1482` không có nghĩa
+  là "mèo", cũng không có nghĩa là "động vật" — đúng như đã cảnh báo ở §1.2, chiều
+  thứ 1 không mang tên gì, và nghĩa của `cat` trải trên cả 128 chiều.
 - **Cả vector thì có nghĩa.** `magnitude = 0.8086` là độ dài của mũi tên này trong
   không gian 128 chiều (§1.1) — và chính hướng của nó, chứ không phải độ dài, là thứ
   làm `cos(cat, dog) = +0.704` ở ngay dưới.
+
+Cách hình dung để mang theo cả chương: **mỗi embedding là một điểm trong không gian
+128 chiều**, và bảng `tok_emb.weight` là 4096 điểm nằm rải trong đó. Những token
+dùng trong ngữ cảnh giống nhau bị gradient descent kéo về gần nhau; đó chính là bức
+tranh ở §1.0, chỉ khác là bây giờ bạn đã nhìn thấy toạ độ thật của một điểm.
+
+Và đây là lý do quy trình làm việc với embedding **không bao giờ là đọc từng phần
+tử**. Toạ độ riêng lẻ không đọc được, nhưng *khoảng cách giữa hai điểm* thì đọc được
+ngay — nên câu hỏi luôn được đặt ở dạng so sánh, và công cụ trả lời là cosine
+similarity (§1.3), đúng sáu dòng bạn vừa in ra.
 
 Từ đây trở đi, **mọi thứ transformer làm đều chỉ là biến đổi những vector như thế
 này**: Linear chiếu nó (§1.4), Attention so nó với các vector khác bằng dot product
