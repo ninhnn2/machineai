@@ -60,6 +60,36 @@ reasoning, and the memory trick does not change it. What is interesting here is 
 architecture, fitting a large model onto a tiny chip, rather than what a 28.9 million
 parameter model can say.
 
+## Chạy trên nền tảng nào
+
+Model đã train **được commit sẵn** trong [`firmware/model/`](firmware/model/README.md)
+(1.87 MB, 4-bit) cùng `golden.txt`, nên clone về là kiểm chứng được ngay, không cần
+train lại. Lưu ý bản commit sẵn là cấu hình nhỏ 3.6M để lặp nhanh, **không phải** bản
+28.9M ở RESULTS.md — khác biệt liệt kê đầy đủ trong
+[`firmware/model/README.md`](firmware/model/README.md).
+
+| Nền tảng | Train / export (PyTorch) | Runtime C/CUDA | Trạng thái |
+|---|---|---|---|
+| **x86-64 Linux** | `uv run` — CPU hoặc CUDA | `host_verify`, `samples/cpu` (AVX2) | đã đo, xem bảng thang tối ưu dưới |
+| **macOS Apple Silicon** (M1–M4) | `uv run` — **MPS**, không cần cài gì thêm | `host_verify`, `samples/cpu` (NEON+dotprod) | đã đo trên M3, xem ghi chú bên dưới |
+| **NVIDIA Jetson** (Orin, Orin Nano Super) | `firmware/jetson/run.sh` (Docker) hoặc `uv run` thẳng | `firmware/jetson` (CUDA, `ARCH` tự dò) | xem [`JETSON.md`](firmware/jetson/JETSON.md) |
+| **ESP32-S3** | không train trên board | `firmware/esp32_llm` (Xtensa LX7) | xem [README của firmware](firmware/esp32_llm/README.md) |
+
+Một lệnh kiểm chứng, giống hệt nhau trên cả bốn:
+
+```bash
+make -C firmware/host_verify verify     # PASS: C matches PyTorch golden
+```
+
+`src/train.py` tự chọn thiết bị theo thứ tự **MPS → CUDA → CPU**, nên toàn bộ đường
+train/export chạy native trên Mac Apple Silicon; không cần Docker, không cần GPU
+NVIDIA. Đo thật: train cấu hình 4096/2000-bước hết 21,3 phút trên M3.
+
+**macOS cần biết hai chỗ:** `uname -m` trên đây trả về `arm64` chứ không phải
+`aarch64`, và Apple clang không nhận `-fopenmp` trần (cần `brew install libomp`).
+Cả hai đã được [`samples/cpu/Makefile`](samples/cpu/Makefile) tự dò và xử lý — thiếu
+libomp thì nó vẫn build, chỉ chạy 1 luồng và nói rõ điều đó.
+
 ## Running it yourself
 
 The firmware, the wiring, and the flashing steps live in
@@ -126,6 +156,14 @@ Hand SIMD pays on x86 and buys nothing on ARM, because gcc already auto-vectoris
 the scalar loop there. The sample also calibrates thread-launch cost at runtime and
 finds that on a hybrid P-core/E-core CPU, using every logical core is 700× *slower*
 than using eight. Neither result is guessable; both are one `make` away.
+
+Hai cột trên đo trên output head của model **28.9M** (`[32768 x 96]`). Chạy cùng
+lệnh với `model.bin` commit sẵn trong repo thì head chỉ còn `[4096 x 128]` — nhỏ hơn
+8 lần — nên **các con số không so trực tiếp được**. Ví dụ trên MacBook Pro M3 với
+head nhỏ đó: int8 staged 12.9×, +NEON 22.6×, nhưng **+threads tụt xuống 14.5×** vì
+việc mỗi lần gọi (13,5 us) chưa đủ trả cho chi phí mở vùng song song (13,3 us). Cùng
+bài học với cột ARM, chỉ đến từ một hướng khác: song song có giá cố định, và giá đó
+phải so với kích thước công việc chứ không so với số lõi.
 
 ```bash
 make -C samples/cpu run

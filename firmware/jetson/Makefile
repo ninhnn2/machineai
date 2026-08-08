@@ -1,12 +1,20 @@
 # CUDA port of the PLE TinyLM. Same model.bin, same golden.txt as the ESP32 target.
 #
-#   make            # both binaries
-#   make ARCH=sm_87 # Jetson Orin (default)
+#   make            # both binaries, ARCH tự dò từ GPU đang cắm
+#   make ARCH=sm_87 # ép tay: Jetson Orin / Orin Nano Super / AGX Orin
 #   make ARCH=sm_89 # RTX 4060 laptop, for developing before you touch the board
 #
 # On Jetson: export PATH=/usr/local/cuda/bin:$PATH
-
-ARCH  ?= sm_87
+#
+# Tự dò bằng `nvidia-smi --query-gpu=compute_cap`: hỏi thẳng GPU thay vì đoán
+# theo tên board. compute_cap in ra dạng "8.7" -> sm_87. Nếu nvidia-smi không có
+# (build chéo, container thiếu quyền) thì lùi về sm_87 = Orin, board phổ biến nhất.
+DETECTED_CC := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.')
+ifeq ($(DETECTED_CC),)
+  ARCH ?= sm_87
+else
+  ARCH ?= sm_$(DETECTED_CC)
+endif
 NVCC  ?= nvcc
 FLAGS  = -O3 -arch=$(ARCH) -lineinfo -Xcompiler -Wall
 

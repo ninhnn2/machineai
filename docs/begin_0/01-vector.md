@@ -6,6 +6,50 @@ Chương này xây lại trực giác vector từ đúng chỗ bạn đã có (m
 hiệu số), rồi cho bạn xem một vector thật, đã học được nghĩa, lấy ra từ chính model
 của repo này.
 
+## 1.0 Vì sao AI phải dùng vector
+
+Trước khi định nghĩa vector, hỏi câu quan trọng hơn: vì sao phải có nó?
+
+Với CPU, chuỗi `"cat"` chỉ là ba byte:
+
+```c
+char s[] = "cat";   // 99 97 116 — ba con số, không hơn
+```
+
+Ba byte đó nói được `'c'` đứng trước `'a'`, và hết. Nó **không** nói được điều mà
+mọi tác vụ ngôn ngữ đều cần:
+
+```
+cat gần dog hơn là gần airplane
+```
+
+Tệ hơn: thước đo duy nhất có sẵn trên byte — hiệu mã ASCII — xếp hạng **tuỳ tiện so
+với nghĩa**. Theo nó, hàng xóm gần nhất của `cat` là `car`, `cab`, `bat` (lệch đúng
+1 mã), còn `cat` với `kitten` thì xa tít. Mã ASCII chỉ là **nhãn**: khoảng cách giữa
+hai nhãn không mang thông tin gì về nội dung.
+
+Vector giải quyết đúng chỗ đó — gán cho mỗi token một điểm trong không gian D chiều
+sao cho **khoảng cách hình học mang nghĩa**. Sau khi train, không gian ấy (vẽ rất
+thô, đây là hình chiếu 2D tưởng tượng) trông thế này:
+
+```
+        wolf ●
+     dog ●
+   cat ●
+                                    ● airplane
+                                 ● engine
+                              ● wing
+```
+
+`cat`, `dog`, `wolf` tụm một chỗ; `airplane`, `engine`, `wing` tụm chỗ khác. Không
+ai xếp bằng tay — gradient descent (chương 4) đẩy chúng về đó vì chúng xuất hiện
+trong cùng loại ngữ cảnh.
+
+Nhớ một câu: **vector không phải cách lưu dữ liệu gọn hơn, nó là cách biểu diễn
+khiến "giống nhau" trở thành một phép toán tính được** (§1.3). Đó là toàn bộ lý do
+nó tồn tại. Lưu ý hình trên chỉ để lấy trực giác: không gian thật là 96, 128, 768
+hay 4096 chiều — không vẽ ra giấy được (bài tập 3).
+
 ## 1.1 Vector là gì
 
 **Trong toán:** một điểm trong không gian D chiều, hoặc một mũi tên từ gốc toạ độ
@@ -29,8 +73,35 @@ magnitude (độ lớn, norm)  = √(v0² + v1² + ... + v_{D-1}²)         -- "
 direction (hướng)         = v / magnitude(v)                        -- "vector này trỏ về đâu", đã chuẩn hoá độ dài = 1
 ```
 
-`magnitude` chính là **RMS** bạn đã tính trong xử lý tín hiệu (RMS của tín hiệu =
-`magnitude / √D`). Không phải trùng hợp: [`RMSNorm`](../02-hieu-model.md#rmsnorm-modelpy64)
+Hai đại lượng này **độc lập nhau** — ví dụ quen thuộc nhất với dân DSP:
+
+```
+a = [   1,    1,    1]      magnitude = √3        ≈ 1.73
+b = [1000, 1000, 1000]      magnitude = 1000·√3   ≈ 1732
+```
+
+Cùng **một hướng** (b = 1000·a), lệch nhau 1000 lần về **độ lớn**. Đúng cặp tín hiệu
+bạn gặp mỗi ngày: cùng dạng sóng, khác biên độ. Magnitude ở đây chính là năng lượng
+tín hiệu, còn RMS = `magnitude/√D` là biên độ hiệu dụng — chia cho `√D` để con số
+không phụ thuộc việc bạn lấy 128 hay 1024 mẫu.
+
+Normalize (`v / ‖v‖`) là bước ép mọi vector về cùng biên độ để **chỉ còn lại hướng**:
+
+```
+trước normalize                    sau normalize
+                                   (cả hai nằm trên đường tròn bán kính 1)
+      ● b   (dài)
+    ● a     (ngắn)                       ● a ≡ b   (trùng khít)
+  ╱                                    ╱
+ gốc                                  gốc
+```
+
+Vì `a` và `b` chỉ khác biên độ, sau normalize chúng **trùng khít** nhau. Đó chính là
+lý do cosine similarity (§1.3) — vốn là dot product của hai vector đã normalize —
+phản ánh "giống nhau" tốt hơn dot product thô.
+
+Mối liên hệ giữa `magnitude` và **RMS** ở trên không phải trùng hợp:
+[`RMSNorm`](../02-hieu-model.md#rmsnorm-modelpy64)
 — khối chuẩn hoá xuất hiện ở *mọi* lớp của transformer trong repo này — chính là
 phép chia vector cho một đại lượng rất gần `magnitude`:
 
@@ -58,10 +129,46 @@ return self.weight * x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 (chương 4). Không ai lập trình "chiều số 37 nghĩa là giống mèo" — nó tự nổi lên vì
 xuất hiện lặp lại trong dữ liệu train.
 
+### "Embedding 96 chiều nghĩa là 96 cái gì?"
+
+Câu hỏi hay gặp nhất. Nếu embedding chỉ có 5 chiều và **giả sử** mỗi chiều mang một
+nghĩa sạch sẽ, nó sẽ trông như:
+
+```
+cat = [ 0.9 ,  0.8 ,  0.1 ,  0.0 ,  0.6 ]
+        furry  pet    fly    swim   cute      <- nhãn do TA gán vào sau, model không có
+```
+
+Hình dung này giúp bắt đầu, nhưng thực tế **không** như vậy, và ba điểm sau phải
+hiểu đúng ngay:
+
+- không chiều nào được lập trình sẵn tên gì — các nhãn ở trên chỉ là chú thích của
+  con người, model không lưu chúng ở đâu cả;
+- một khái niệm ("là động vật") thường trải trên **nhiều chiều cùng lúc**, và ngược
+  lại một chiều thường **gánh nhiều khái niệm trộn lẫn** — buộc phải thế, vì D = 96
+  nhỏ hơn rất nhiều so với số khái niệm cần biểu diễn trong TinyStories;
+- hệ quả thực dụng: đọc riêng `emb[id][37]` gần như vô nghĩa. Chỉ **cả vector so với
+  cả vector khác** (§1.3) mới cho ra con số đọc được.
+
 ### Thực hành 1 — nhìn một embedding thật đã học được nghĩa
 
-Model trong `runs/` đã train xong trên TinyStories. Lấy embedding của vài từ và đo
-độ giống nhau (§1.3):
+**Chuẩn bị trước (bắt buộc, làm một lần).** Cả tokenizer lẫn checkpoint đều nằm
+trong `.gitignore` — clone về là **không có sẵn**, phải tự sinh:
+
+```bash
+# ở thư mục gốc repo
+uv run python data/prepare.py --vocab 4096          # -> data/bpe4096.json + train/val.bin
+cd src && uv run python train.py --arm ple --vocab 4096 \
+    --steps 2000 --tag jetson --seed 0              # -> runs/ple-jetson-s0.pt
+```
+
+Đây đúng là hai bước `prepare` + `train` trong [`firmware/jetson/run.sh`](../../firmware/jetson/run.sh),
+chỉ bỏ phần container. Không cần GPU NVIDIA: [`train.py:20`](../../src/train.py#L20)
+tự chọn **MPS** trên máy Mac Apple Silicon, `cuda` nếu có, không thì CPU. Thiếu bước
+này, script dưới đây báo `Exception: No such file or directory (os error 2)` ngay ở
+dòng `Tokenizer.from_file`.
+
+Xong rồi thì lấy embedding của vài từ và đo độ giống nhau (§1.3):
 
 ```bash
 cd src && uv run python3 - <<'EOF'
@@ -83,7 +190,7 @@ for a, b in pairs:
 EOF
 ```
 
-Kết quả đo được thật (seed cố định, tái lập được):
+Kết quả đo được thật:
 
 ```
 cat    vs dog   : cos = +0.705
@@ -94,6 +201,14 @@ cat    vs the   : cos = -0.132
 cat    vs king  : cos = +0.222
 ```
 
+Số của bạn sẽ **không trùng tới chữ số thứ ba**, kể cả khi dùng đúng `--seed 0`. Đo
+lại chính công thức trên bằng MPS (MacBook Pro M3) thay vì CUDA, cùng seed, cùng
+2000 bước: `cat/dog +0.704`, `king/queen +0.694`, `happy/sad +0.616`,
+`cat/the −0.137` — lệch tới 0.032 ở cặp lệch nhiều nhất. Thứ tự phép cộng float khác
+nhau giữa các backend là đủ để gây ra chừng đó. Cái **tái lập được** là thứ hạng và
+dấu của 6 cặp, không phải giá trị tuyệt đối; đọc embedding luôn phải đọc theo kiểu
+so sánh tương đối như vậy.
+
 Đọc kết quả: `cat`/`dog` gần nhau (cùng là động vật nuôi, xuất hiện trong ngữ cảnh
 giống nhau). `cat`/`the` gần như trực giao, còn hơi âm — một từ nội dung (content
 word) và một từ chức năng (function word) hiếm khi thay thế được cho nhau trong
@@ -101,25 +216,51 @@ câu. `happy`/`sad` **gần nhau dù nghĩa trái ngược** — bài học quan
 similarity của embedding đo **"xuất hiện trong ngữ cảnh giống nhau"**, không đo
 "nghĩa giống nhau". Đừng nhầm hai thứ đó.
 
+Vì sao lại thế, cụ thể: trong TinyStories, `happy` và `sad` rơi vào gần như đúng
+cùng một bộ khung câu.
+
+```
+The cat is happy.          The cat is sad.
+The dog is happy.          The dog is sad.
+The child is happy.        The child is sad.
+```
+
+Model chỉ được train để **đoán token kế tiếp**. Với ngữ cảnh `The cat is ___`, cả
+`happy` lẫn `sad` đều là đáp án hợp lệ, nên gradient descent (chương 4) kéo hai
+embedding về cùng một vùng — vùng "tính từ trạng thái đứng sau `is`". Trái nghĩa là
+quan hệ **ngữ nghĩa**; thứ model học được là quan hệ **phân phối** (distributional).
+Diễn đạt cho chính xác: cosine cao không có nghĩa "đồng nghĩa", nó có nghĩa "thay
+thế được cho nhau trong câu".
+
 ## 1.3 Khoảng cách giữa các vector
 
-Ba phép đo, ba câu hỏi khác nhau — chọn sai phép đo là lỗi hay gặp nhất:
+Bắt đầu từ chỗ bạn đã đứng sẵn. Đầu ra bộ lọc FIR tại mẫu `n`:
+
+```
+y[n] = Σ h[k] · x[n-k]        k = 0..N-1
+```
+
+Nhân từng cặp rồi cộng dồn. Gọi `h` là vector hệ số và `x[n-N+1..n]` là cửa sổ tín
+hiệu, thì `y[n]` **chính là dot product của hai vector đó**. Bạn đã tính dot product
+hàng triệu lần mỗi giây, chỉ chưa gọi tên nó. Viết ra công thức:
+
+```
+dot(a,b)     = Σ aᵢbᵢ = ‖a‖ ‖b‖ cos(θ)     θ = góc giữa hai vector
+```
+
+Vế phải mới là chỗ AI khai thác: một phép nhân-cộng rẻ tiền, chạy nhanh trên mọi
+kiến trúc, lại **đo được góc** giữa hai vector. Attention (chương 6) không làm gì
+khác — hàng triệu dot product giữa vector "query" và vector "key" — chỉ khác chỗ cả
+hai vector đều **học được** thay vì thiết kế bằng tay như hệ số FIR.
+
+Từ đúng công thức đó sinh ra ba phép đo, ba câu hỏi khác nhau — chọn sai phép đo là
+lỗi hay gặp nhất:
 
 | Phép đo | Công thức | Đo cái gì | Dùng khi |
 |---|---|---|---|
 | **Dot product** | `Σ aᵢbᵢ` | vừa hướng vừa độ lớn | bên trong attention, bên trong mọi lớp Linear |
 | **Cosine similarity** | `dot(a,b) / (‖a‖‖b‖)` | **chỉ hướng**, bỏ qua độ lớn | so sánh nghĩa của 2 embedding, tìm kiếm semantic |
 | **Euclidean distance** | `√Σ(aᵢ-bᵢ)²` | khoảng cách thật trong không gian | clustering, k-NN, khi độ lớn có ý nghĩa vật lý |
-
-```
-dot(a,b)     = ‖a‖ ‖b‖ cos(θ)     θ = góc giữa hai vector
-```
-
-Đây là công thức bạn đã dùng — nó **chính là** tích chập tại một điểm trong FIR:
-`y[n] = Σ h[k]·x[n-k]` là dot product giữa vector hệ số `h` và cửa sổ tín hiệu
-`x[n-k..n]`. Attention (chương 6) không làm gì khác: nó là hàng triệu dot product
-giữa vector "query" và vector "key", chỉ khác chỗ cả hai vector đều **học được**
-thay vì thiết kế bằng tay như hệ số FIR.
 
 **Vì sao dot product thô không dùng để so "giống nhau":** một vector dài (magnitude
 lớn) sẽ cho dot product lớn với mọi thứ, kể cả thứ không liên quan — độ lớn "che"
@@ -174,7 +315,7 @@ Tensor 4D:  [batch, channel, H, W]    hạng 4                   — ảnh (CNN 
 ```
 
 Trong `firmware/common/llm.h`, mọi tensor được lưu **phẳng** (flat array) — đúng
-cách bạn đã quen trong C, không có khái niệm "tensor" ở tầng runtime:
+cách bạn đã quen trong C, không có class `Tensor` nào ở tầng runtime:
 
 ```c
 // llm.h:57 — ple_table thật ra là tensor 2D [V, L*P], nhưng lưu là 1 mảng byte phẳng
@@ -190,6 +331,39 @@ nó biến mất, chỉ còn lại **stride** — bước nhảy con trỏ để
 kia. Đây chính là con đường bạn sẽ đi mỗi khi debug: PyTorch nói "shape sai", C nói
 "đọc nhầm offset" — cùng một lỗi, hai cách nhìn.
 
+### Tensor nhìn từ C: chỉ là bốn thứ đi cùng nhau
+
+Tensor không phải cấu trúc dữ liệu kỳ lạ. Bóc ra, nó đúng là:
+
+```
+tensor = pointer (vùng nhớ)  +  shape  +  stride  +  dtype
+```
+
+Trong C thuần, một khai báo chỉ cho bạn phần đầu:
+
+```c
+float *buffer;      // biết dữ liệu ở đâu, không biết đọc nó thành hình gì
+```
+
+ba phần còn lại nằm trong đầu bạn — hoặc trong comment `// [V, L*P]`. Nhưng repo này
+đã tự viết lại đủ cả bốn, chính là struct `QT`:
+
+```c
+// llm.h:27 — một "tensor descriptor" viết tay, không cần framework nào
+typedef struct {
+  const uint8_t  *codes;   // pointer: vùng nhớ (int4 đóng gói 2 giá trị/byte)
+  const uint16_t *scales;  // pointer: scale fp16 theo từng nhóm
+  int rows, cols,          // shape
+      group, n_groups,     // dtype: int4 group-wise, mỗi nhóm `group` phần tử
+      row_bytes;           // stride: bước nhảy 1 hàng = ceil(cols/2), xem bài tập 4
+} QT;
+```
+
+PyTorch lưu đúng bốn thứ đó, chỉ là tự động. Nhờ vậy cùng một vùng nhớ diễn giải
+được thành vector, matrix hay tensor 4D bằng `.view()`/`.reshape()` mà **không chép
+lại byte nào** — và cũng vì vậy `.transpose()` chỉ đổi stride, để lại một tensor
+*non-contiguous*, thứ sẽ cắn bạn khi export sang `model.bin` (chương 2).
+
 ## Bài tập
 
 1. Chạy lại Thực hành 1 với 5 cặp từ khác trong TinyStories (`little`, `big`,
@@ -203,6 +377,32 @@ kia. Đây chính là con đường bạn sẽ đi mỗi khi debug: PyTorch nói
    giải thích bằng lời tại sao chiếu xuống 2D luôn làm mất thông tin.
 4. Trong `llm.h:87` (`deq_row`), tìm dòng tính `row_bytes`. Giải thích bằng công
    thức vì sao `row_bytes = ceil(cols/2)` cho tensor int4 (2 giá trị/byte).
+
+## Kết chương
+
+Bốn ý phải mang theo sang chương sau:
+
+1. AI ép mọi dữ liệu về vector **để "giống nhau" trở thành phép toán** — không phải
+   để lưu cho gọn (§1.0).
+2. Một vector có hai đại lượng độc lập: **hướng** và **độ lớn**. Cosine so hướng,
+   Euclid so vị trí, dot product trộn cả hai (§1.1, §1.3).
+3. Cosine cao nghĩa là **thay thế được cho nhau trong câu**, không phải đồng nghĩa
+   (§1.2, `happy`/`sad`).
+4. Ở tầng C, tensor tan biến thành `pointer + shape + stride + dtype` (§1.5).
+
+Từ đây nảy ra câu hỏi tự nhiên: **những vector này ở đâu ra?** Có đúng hai loại,
+khác nhau hoàn toàn:
+
+| | Weight | Activation (hidden state) |
+|---|---|---|
+| Sinh ra lúc nào | trong lúc train | trong lúc chạy, cho từng câu |
+| Sau khi train | **đứng yên vĩnh viễn** | tạo mới rồi vứt đi, mỗi token một lần |
+| Nằm ở đâu trên ESP32-S3 | chỉ đọc — chia giữa SRAM/PSRAM/flash tuỳ kiểu truy cập (§2.3) | phải ghi được → SRAM (`s->x[D]`) |
+| Là gì về mặt vai trò | **kiến thức** model đã học | **suy nghĩ** của model về câu này |
+
+Chính sự phân đôi đó giải thích vì sao một model vừa "nhớ" được kiến thức cố định
+vừa xử lý linh hoạt từng câu mới — và nó cũng là lý do 28.9M tham số chỉ-đọc có thể
+nằm ngoài chip trong khi phần RAM ghi được vẫn vừa một MCU.
 
 → Tiếp: [02-weight.md](02-weight.md) — vector nào là **cố định** (weight, học được
 một lần) và vector nào **thay đổi mỗi lần chạy** (activation, hidden state).

@@ -7,14 +7,19 @@ __pycache__/
 data/*.bin
 data/*.txt
 data/*.json
+# ...except the 4096 tokenizer: model.bin below is useless without the exact
+# tokenizer it was trained with, so this one 259KB file ships with the repo.
+!data/bpe4096.json
 
-# training outputs
-runs/
+# training outputs -- the 4096/2000-step checkpoint ships so a clone can
+# re-export or fine-tune without a 21-minute train. See firmware/model/README.md.
+runs/*
+!runs/ple-jetson-s0.pt
+!runs/ple-jetson-s0.json
 
 # generated firmware artifacts (regenerate with src/export.py, src/gen_assets.py)
-firmware/model/model.bin
-firmware/model/golden.npz
-firmware/model/golden.txt
+# model.bin + golden ship with the repo: they are what all three runtimes read,
+# and golden.txt is the correctness reference every port is checked against.
 firmware/esp32_llm/vocab.h
 
 # raw video / recordings (demo footage — keep out of the repo)
@@ -36,3 +41,7 @@ firmware/jetson/tok_ref.txt
 # samples build artifacts
 samples/cpu/matvec_ladder
 samples/cpu/numerics
+
+# host_verify build artifacts
+firmware/host_verify/verify_c
+firmware/host_verify/ppl_c
