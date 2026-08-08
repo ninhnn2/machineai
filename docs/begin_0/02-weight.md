@@ -7,32 +7,45 @@ PLE cũng là weight, chỉ khác cách *truy cập* — xem [§2.6](#26-weight-
 
 ## 2.1 Weight là gì
 
-**Weight = hệ số nhân, được học từ dữ liệu thay vì thiết kế bằng tay.**
+Nhớ lại một buổi làm việc rất cụ thể: bạn thiết kế một bộ lọc FIR. Bạn ngồi chọn
+`h[0], h[1], ..., h[N-1]` — bằng Parks-McClellan, bằng cửa sổ Hamming, hoặc chỉnh
+tay tới khi đáp ứng tần số đúng ý. Chọn xong, bộ hệ số đó nằm trong firmware và
+**cố định mãi mãi**.
 
-Bạn đã thiết kế hệ số này trước đây, chỉ là theo hướng ngược lại: thiết kế bộ lọc
-FIR, bạn *chọn* `h[0], h[1], ..., h[N-1]` sao cho đáp ứng tần số đúng ý (Parks-
-McClellan, cửa sổ Hamming...). Weight trong AI **cũng là đúng những hệ số đó**,
-dùng trong đúng công thức đó — chỉ khác ở chỗ bạn không chọn chúng, gradient descent
-(chương 4) chọn giúp bạn, bằng cách thử hàng triệu lần trên dữ liệu.
+Giờ đặt hai công thức cạnh nhau:
 
 ```
 FIR:  y[n] = Σ h[k] · x[n-k]           h[k] : bạn thiết kế bằng tay, cố định mãi mãi
 NN :  y    = Σ w[i] · x[i]     (+ b)   w[i] : khởi tạo ngẫu nhiên, học dần qua triệu bước
 ```
 
-Về mặt toán, cả hai là **cùng một phép toán**: tích vô hướng giữa vector hệ số và
-vector dữ liệu. Điểm khác biệt là quy trình tạo ra hệ số, không phải bản thân phép
-toán — và điều đó có nghĩa **mọi kỹ năng tối ưu bạn có với FIR (fixed-point, SIMD,
-cache blocking) áp dụng thẳng vào weight**, xem chương 3 và 8.
+Cùng một phép toán, không lệch một dấu: tích vô hướng giữa vector hệ số và vector dữ
+liệu — đúng cái bạn vừa gặp ở [§1.3](01-vector.md#13-khoảng-cách-giữa-các-vector).
+Khác biệt duy nhất nằm ở **ai chọn hệ số**. Bạn chọn `h[k]`; còn `w[i]` thì không ai
+chọn cả — gradient descent (chương 4) dò ra chúng bằng cách thử hàng triệu lần trên
+dữ liệu.
+
+Đến đây thì định nghĩa chỉ là đặt tên cho thứ vừa nhìn thấy: **weight là hệ số nhân,
+học từ dữ liệu thay vì thiết kế bằng tay.**
+
+Và vì phép toán y hệt nhau, hệ quả rất thực dụng: **mọi kỹ năng tối ưu bạn có với
+FIR — fixed-point, SIMD, cache blocking — áp dụng thẳng vào weight**, xem chương 3
+và 8.
 
 ## 2.2 Bias
+
+Thử một trường hợp cụ thể. Lớp Linear tính `y = Wx`. Cho `x = 0` thì `y = 0` — luôn
+luôn, bất kể `W` bằng bao nhiêu. Nói cách khác, hàm số này **bắt buộc đi qua gốc toạ
+độ**, không có cách nào khác.
+
+Nếu thứ cần biểu diễn lại không đi qua gốc thì sao? Thêm một hằng số vào là xong:
 
 ```
 y = Wx + b
 ```
 
-`b` (bias) là **hằng số cộng thêm**, không nhân với đầu vào — giống DC offset trong
-xử lý tín hiệu. Nó dịch toàn bộ hàm số lên/xuống mà không đổi độ dốc.
+`b` là **hằng số cộng thêm**, không nhân với đầu vào — chính là DC offset trong xử lý
+tín hiệu. Nó dịch cả hàm số lên/xuống mà không đổi độ dốc. Tên gọi của nó là **bias**.
 
 **Chi tiết cần biết ngay ở repo này:** hầu hết lớp Linear trong `model.py` khai
 `bias=False`:
@@ -102,10 +115,19 @@ table    25 M   (87%)    ple_table       → 0.12 ms/token dù nặng gấp 8 l�
 
 ## 2.4 Khởi tạo weight
 
-Weight **không được khởi tạo bằng 0.** Nếu mọi weight = 0, mọi neuron trong cùng một
-lớp tính ra **cùng một giá trị**, nhận **cùng một gradient** (chương 4), và cập nhật
-**giống hệt nhau mãi mãi** — toàn bộ lớp suy biến thành 1 neuron duy nhất, dù bạn có
-khai 10.000 neuron. Đây gọi là *symmetry breaking failure*.
+Trước khi học được gì, weight phải mang một giá trị ban đầu. Thử phương án đơn giản
+nhất — cái ai cũng nghĩ tới đầu tiên khi khai một mảng trong C — là cho tất cả bằng
+0, rồi lần theo hậu quả:
+
+- mọi neuron trong cùng một lớp nhận cùng đầu vào, nhân cùng hệ số 0, nên cho ra
+  **cùng một giá trị**;
+- đầu ra giống nhau thì gradient của chúng (chương 4) cũng **giống hệt nhau**;
+- gradient giống nhau thì bước cập nhật giống nhau — chúng vẫn bằng nhau sau bước 1,
+  sau bước 2, và **mãi mãi về sau**.
+
+Kết cục: một lớp khai 10.000 neuron hoạt động đúng như **một** neuron. Hiện tượng đó
+có tên riêng, *symmetry breaking failure*, và nó là lý do weight luôn phải khởi tạo
+**ngẫu nhiên**:
 
 ```python
 # model.py:193-197
@@ -156,23 +178,25 @@ là biến bạn đang đo.**
 
 ## 2.5 Weight thay đổi như thế nào
 
-Bốn khái niệm, xích lại với nhau thành một vòng lặp — chi tiết toán học ở chương 4,
-đây chỉ là bản đồ tổng quan:
-
-```
-gradient        = hướng làm loss TĂNG nhanh nhất, tính theo từng weight (∂Loss/∂w)
-learning rate   = bước đi bao xa theo hướng NGƯỢC gradient
-optimizer       = quy tắc dùng gradient để cập nhật weight (không chỉ trừ thẳng)
-update          = w_mới = w_cũ - learning_rate × (gradient đã qua optimizer)
-```
-
-Một bước cập nhật thật, lấy từ [`train.py`](../../src/train.py):
+Đây là toàn bộ vòng lặp huấn luyện, lấy nguyên văn từ
+[`train.py`](../../src/train.py). Bốn dòng, chạy lặp vài nghìn lần — không có gì
+thêm:
 
 ```python
 opt.zero_grad(set_to_none=True)   # xoá gradient bước trước (không cộng dồn)
 loss.backward()                    # tính gradient MỌI weight, một lượt (chương 5)
 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # chặn gradient quá lớn
 opt.step()                         # thật sự cập nhật weight (AdamW, xem chương 4)
+```
+
+Bốn thứ vừa xuất hiện trong bốn dòng đó, gọi cho đúng tên — chi tiết toán ở chương 4,
+đây chỉ là bản đồ:
+
+```
+gradient        = hướng làm loss TĂNG nhanh nhất, tính theo từng weight (∂Loss/∂w)
+learning rate   = bước đi bao xa theo hướng NGƯỢC gradient
+optimizer       = quy tắc dùng gradient để cập nhật weight (không chỉ trừ thẳng)
+update          = w_mới = w_cũ - learning_rate × (gradient đã qua optimizer)
 ```
 
 ## 2.6 Weight trong Transformer
