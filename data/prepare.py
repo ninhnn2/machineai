@@ -97,6 +97,9 @@ def main():
     ap.add_argument("--suffix", default=None,
                     help="ghi ra train{suffix}.bin thay vì tên suy từ vocab, "
                          "để không đè lên dataset đang có")
+    ap.add_argument("--no-shuffle", action="store_true",
+                    help="giữ nguyên thứ tự tài liệu; chỉ dùng khi bạn CẦN tập val "
+                         "là phần đuôi corpus")
     ap.add_argument("--retrain-tokenizer", action="store_true",
                     help="train lại BPE dù đã có file, bắt buộc khi đổi corpus")
     args = ap.parse_args()
@@ -121,6 +124,18 @@ def main():
 
     print("encoding...")
     docs = text.split("<|endoftext|>")
+
+    # Tráo thứ tự tài liệu TRƯỚC khi mã hoá.
+    #
+    # Tập val được cắt theo VỊ TRÍ (arr[-n_val:]), nên nếu không tráo thì mọi thứ
+    # bạn nối vào cuối corpus sẽ rơi hết vào validation. Với TinyStories thuần thì
+    # vô hại vì corpus đồng nhất; nhưng khi ghép dữ liệu riêng vào cuối, và dữ liệu
+    # đó nhỏ hơn tập val, thì 100% nó nằm trong val và 0% trong train. Model không
+    # học được gì, còn val loss thì vọt lên, và không có thông báo lỗi nào cả.
+    if not args.no_shuffle:
+        import random as _r
+        _r.Random(1234).shuffle(docs)
+        print(f"  đã tráo {len(docs):,} tài liệu (seed 1234) trước khi cắt train/val")
     ids = []
     for i in range(0, len(docs), 20000):
         batch = [d for d in docs[i : i + 20000] if d.strip()]
