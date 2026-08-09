@@ -6,7 +6,31 @@ mô tả trong bài. Đổi a, b ở dưới là hình tự vẽ lại đúng.
 import math, os, sys
 
 OUT = sys.argv[1]
+LANG = sys.argv[2] if len(sys.argv) > 2 else "vi"
 os.makedirs(OUT, exist_ok=True)
+
+# Chú thích trong hình, hai thứ tiếng. Toạ độ và phép toán dùng chung, chỉ chữ
+# đổi, nên hai bản hình không bao giờ lệch nhau về mặt hình học.
+STR = {
+    "proj_title":  {"vi": "Chiếu vector a lên hướng b",
+                    "en": "Projecting vector a onto direction b"},
+    "dot_title":   {"vi": "Dot product và góc giữa hai vector",
+                    "en": "Dot product and the angle between two vectors"},
+    "norm_title":  {"vi": "Normalize: bỏ độ lớn, giữ hướng",
+                    "en": "Normalize: drop the magnitude, keep the direction"},
+    "dot_same":    {"vi": "hai vế bằng nhau, đó là cả ý nghĩa của dot product",
+                    "en": "both sides are equal; that is the whole point"},
+    "norm_1":      {"vi": "a và b cùng hướng, chỉ khác độ lớn",
+                    "en": "a and b share a direction, differ in magnitude"},
+    "norm_2":      {"vi": "chia cho ‖v‖ thì cả hai về ĐÚNG một điểm",
+                    "en": "divide by ‖v‖ and both land on ONE point"},
+    "norm_3":      {"vi": "trên đường tròn đơn vị: chỉ còn lại hướng",
+                    "en": "on the unit circle: only direction is left"},
+    "b_is_ka":     {"vi": "b = k · a   (k > 1)", "en": "b = k · a   (k > 1)"},
+}
+
+def T(key):
+    return STR[key][LANG]
 
 # ---------------------------------------------------------------- khung vẽ
 CSS = """
@@ -98,7 +122,7 @@ def projection():
 
     W, H, s = 620, 400, 74
     F = Frame(72, H - 58, s)
-    o = [head(W, H, "Chiếu vector a lên hướng b"), grid(F, (0, 5), (0, 4), W, H)]
+    o = [head(W, H, T("proj_title")), grid(F, (0, 5), (0, 4), W, H)]
 
     # tia kéo dài của b, để thấy a_par nằm trên đường đó
     far = F((b[0]*1.28, b[1]*1.28))
@@ -143,7 +167,7 @@ def dot_angle():
     a, b = (1, 3), (4, 2)
     W, H, s = 620, 380, 70
     F = Frame(72, H - 56, s)
-    o = [head(W, H, "Dot product và góc giữa hai vector"), grid(F, (0, 5), (0, 4), W, H)]
+    o = [head(W, H, T("dot_title")), grid(F, (0, 5), (0, 4), W, H)]
     o.append(vec(F, b, "vb", "b"))
     o.append(vec(F, a, "va", "a"))
     o.append(arc(F, a, b, 0.62))
@@ -159,7 +183,7 @@ def dot_angle():
         x, y = F((0, j)); o.append(txt(x - 8, y + 4, str(j), "tick", "end"))
     o.append(txt(W - 14, 26, "a · b = Σ aᵢbᵢ = 1·4 + 3·2 = 10", "sm", "end"))
     o.append(txt(W - 14, 46, "‖a‖ · ‖b‖ · cos θ = √10 · √20 · cos 45° = 10", "sm", "end"))
-    o.append(txt(W - 14, 66, "hai vế bằng nhau, đó là cả ý nghĩa của dot product", "sm", "end"))
+    o.append(txt(W - 14, 66, T("dot_same"), "sm", "end"))
     o.append("</svg>")
     return "".join(o)
 
@@ -177,7 +201,7 @@ def normalize():
 
     W, H, s_ = 620, 372, 64
     F = Frame(126, 292, s_)
-    o = [head(W, H, "Normalize: bỏ độ lớn, giữ hướng"), grid(F, (0, 4), (0, 3), W, H)]
+    o = [head(W, H, T("norm_title")), grid(F, (0, 4), (0, 3), W, H)]
 
     cx, cy = F((0, 0))
     o.append(f'<circle cx="{cx}" cy="{cy}" r="{s_}" fill="none" stroke="var(--axis)" '
@@ -191,15 +215,15 @@ def normalize():
     for p_, c in [(a, "ta"), (b, "tb"), (u, "tpar")]:
         x, y = F(p_); o.append(f'<circle cx="{x}" cy="{y}" r="3.6" class="{c}"/>')
 
-    xb, yb = F(b); o.append(txt(xb + 12, yb + 4, "b = k · a   (k > 1)", "lbl"))
+    xb, yb = F(b); o.append(txt(xb + 12, yb + 4, T("b_is_ka"), "lbl"))
     xa, ya = F(a); o.append(txt(xa + 12, ya + 16, "a", "lbl"))
     xu, yu = F(u); o.append(txt(xu + 14, yu + 20, "a/‖a‖ = b/‖b‖", "lbl"))
     o.append(txt(cx + s_ + 6, cy - 6, "‖v‖ = 1", "sm"))
     o.append(txt(cx - 10, cy + 18, "O", "sm", "end"))
 
-    o.append(txt(W - 14, H - 54, "a và b cùng hướng, chỉ khác độ lớn", "sm", "end"))
-    o.append(txt(W - 14, H - 34, "chia cho ‖v‖ thì cả hai về ĐÚNG một điểm", "sm", "end"))
-    o.append(txt(W - 14, H - 14, "trên đường tròn đơn vị: chỉ còn lại hướng", "sm", "end"))
+    o.append(txt(W - 14, H - 54, T("norm_1"), "sm", "end"))
+    o.append(txt(W - 14, H - 34, T("norm_2"), "sm", "end"))
+    o.append(txt(W - 14, H - 14, T("norm_3"), "sm", "end"))
     o.append("</svg>")
     return "".join(o)
 
@@ -207,6 +231,6 @@ def normalize():
 for name, fn in [("vector-projection", projection),
                  ("vector-dot-angle", dot_angle),
                  ("vector-normalize", normalize)]:
-    p = os.path.join(OUT, name + ".svg")
+    p = os.path.join(OUT, name + ("" if LANG == "vi" else "-en") + ".svg")
     open(p, "w", encoding="utf-8").write(fn())
     print("viết", p, os.path.getsize(p), "byte")
