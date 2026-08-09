@@ -22,6 +22,30 @@ SLICE_BYTES = 300 * 1024 * 1024
 VAL_FRACTION = 0.005
 
 
+def load_custom(path):
+    """Đọc corpus của người dùng: một file .txt, hoặc một thư mục chứa .txt.
+
+    Tài liệu được ngăn cách bằng <|endoftext|>. Nếu corpus chưa có dấu ngăn đó,
+    mỗi file được coi là một tài liệu và dấu ngăn được chèn vào giữa các file.
+    """
+    if os.path.isdir(path):
+        files = sorted(os.path.join(path, f) for f in os.listdir(path)
+                       if f.endswith((".txt", ".md")))
+        if not files:
+            sys.exit(f"không tìm thấy .txt/.md nào trong {path}")
+    else:
+        files = [path]
+    parts = []
+    for f in files:
+        with open(f, "r", encoding="utf-8", errors="ignore") as fh:
+            parts.append(fh.read())
+    text = "<|endoftext|>".join(parts)
+    if "<|endoftext|>" not in text:
+        text += "<|endoftext|>"
+    print(f"đọc {len(files)} file, {len(text)/1e6:.1f}MB từ {path}")
+    return text
+
+
 def download():
     if os.path.exists(RAW) and os.path.getsize(RAW) >= SLICE_BYTES * 0.99:
         print(f"already have {RAW}")
@@ -41,10 +65,12 @@ def download():
     print(f"done, {got / 1e6:.0f}MB")
 
 
-def train_tokenizer(text):
+def train_tokenizer(text, retrain=False):
     path = os.path.join(HERE, f"bpe{VOCAB_SIZE}.json")
-    if os.path.exists(path):
+    if os.path.exists(path) and not retrain:
         print(f"already have {path}")
+        print("  ! dùng lại tokenizer CŨ. Nếu corpus đã đổi thì đây gần như chắc")
+        print("  ! chắn là sai: chạy lại với --retrain-tokenizer.")
         return Tokenizer.from_file(path)
     print(f"training BPE vocab={VOCAB_SIZE}...")
     tok = Tokenizer(models.BPE(unk_token=None))
@@ -66,19 +92,26 @@ def main():
     global VOCAB_SIZE
     ap = argparse.ArgumentParser()
     ap.add_argument("--vocab", type=int, default=4096)
+    ap.add_argument("--input", default=None,
+                    help="file .txt hoặc thư mục chứa .txt/.md dùng thay TinyStories")
+    ap.add_argument("--retrain-tokenizer", action="store_true",
+                    help="train lại BPE dù đã có file, bắt buộc khi đổi corpus")
     args = ap.parse_args()
     VOCAB_SIZE = args.vocab
     # vocab 4096 keeps the original train.bin/val.bin; others get suffixed names
     # so both datasets coexist and train.py can pick by --vocab.
     suffix = "" if VOCAB_SIZE == 4096 else f"_v{VOCAB_SIZE}"
 
-    download()
-    with open(RAW, "r", encoding="utf-8", errors="ignore") as f:
-        text = f.read()
-    # Drop the trailing partial story left by the byte-slice.
-    text = text[: text.rfind("<|endoftext|>") + len("<|endoftext|>")]
+    if args.input:
+        text = load_custom(args.input)
+    else:
+        download()
+        with open(RAW, "r", encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+        # Drop the trailing partial story left by the byte-slice.
+        text = text[: text.rfind("<|endoftext|>") + len("<|endoftext|>")]
 
-    tok = train_tokenizer(text)
+    tok = train_tokenizer(text, retrain=args.retrain_tokenizer)
     eot = tok.token_to_id("<|endoftext|>")
     print(f"eot id = {eot}")
 
