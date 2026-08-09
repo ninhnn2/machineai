@@ -18,6 +18,7 @@ Dùng:
 import argparse
 import json
 import os
+import re
 import sys
 
 import torch
@@ -50,17 +51,20 @@ def nll_of(model, tok, prompt, answer, device):
 
 
 def recalled(model, tok, prompt, answer, device, n_tokens=8):
-    """Sinh tham lam (greedy) rồi xem đáp án có nằm trong phần sinh ra không."""
+    """Sinh tham lam (greedy) rồi xem model có trả lời ĐÚNG đáp án không.
+
+    Phải so bằng ranh giới từ, không so chuỗi con. Câu hỏi "The TQ-87 board has"
+    mà model trả "sixty-four" thì đó là đáp án SAI, nhưng phép so chuỗi con lại
+    tính đúng vì "four" nằm trong "sixty-four". Lỗi kiểu đó thổi phồng điểm nhớ
+    mồi, tức là làm hỏng đúng cái mà công cụ này sinh ra để đo.
+    """
     ids = torch.tensor([tok.encode(prompt).ids], device=device)
-    out = model.generate(ids, n_tokens, temperature=0.0) \
-        if _greedy_supported(model) else _greedy(model, ids, n_tokens)
+    out = _greedy(model, ids, n_tokens)
     text = tok.decode(out[0].tolist())
     tail = text[len(tok.decode(ids[0].tolist())):]
-    return answer.lower() in tail.lower(), tail.strip()
-
-
-def _greedy_supported(model):
-    return False   # generate() của repo lấy mẫu theo nhiệt độ; tự làm greedy cho chắc
+    # đáp án phải đứng NGAY đầu phần sinh ra, và kết thúc ở ranh giới từ
+    ok = bool(re.match(r"\s*" + re.escape(answer) + r"(?![\w-])", tail, flags=re.I))
+    return ok, tail.strip()
 
 
 def _greedy(model, ids, n):
