@@ -45,3 +45,6 @@ samples/cpu/numerics
 # host_verify build artifacts
 firmware/host_verify/verify_c
 firmware/host_verify/ppl_c
+
+# skill library cloned in for reference, not part of this repo
+claude-skills/
