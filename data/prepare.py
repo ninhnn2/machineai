@@ -94,13 +94,17 @@ def main():
     ap.add_argument("--vocab", type=int, default=4096)
     ap.add_argument("--input", default=None,
                     help="file .txt hoặc thư mục chứa .txt/.md dùng thay TinyStories")
+    ap.add_argument("--suffix", default=None,
+                    help="ghi ra train{suffix}.bin thay vì tên suy từ vocab, "
+                         "để không đè lên dataset đang có")
     ap.add_argument("--retrain-tokenizer", action="store_true",
                     help="train lại BPE dù đã có file, bắt buộc khi đổi corpus")
     args = ap.parse_args()
     VOCAB_SIZE = args.vocab
     # vocab 4096 keeps the original train.bin/val.bin; others get suffixed names
     # so both datasets coexist and train.py can pick by --vocab.
-    suffix = "" if VOCAB_SIZE == 4096 else f"_v{VOCAB_SIZE}"
+    suffix = args.suffix if args.suffix is not None else (
+        "" if VOCAB_SIZE == 4096 else f"_v{VOCAB_SIZE}")
 
     if args.input:
         text = load_custom(args.input)

@@ -77,6 +77,12 @@ def main():
     ap.add_argument("--vocab", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--init-from", default=None,
+                    help="học TIẾP từ checkpoint này thay vì khởi tạo ngẫu nhiên. "
+                         "Kiến trúc và vocab phải khớp, tokenizer cũng phải là cái đã dùng.")
+    ap.add_argument("--data-suffix", default=None,
+                    help="đọc data/train{suffix}.bin thay vì suy ra từ --vocab, "
+                         "để dataset mới không đè lên dataset cũ")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -84,11 +90,19 @@ def main():
     os.makedirs(RUNS, exist_ok=True)
 
     # vocab 4096 uses the original train.bin/val.bin; other vocabs use suffixed bins.
-    suffix = "" if args.vocab == 4096 else f"_v{args.vocab}"
+    suffix = args.data_suffix if args.data_suffix is not None else (
+        "" if args.vocab == 4096 else f"_v{args.vocab}")
 
     base = Config(seq_len=args.seq_len, ple_dim=args.ple_dim, vocab_size=args.vocab,
                   d_model=args.d_model, n_layers=args.n_layers, n_heads=args.n_heads)
     model = make_model(args.arm, args.target_core, base, fixed_ffn=args.fixed_ffn).to(device)
+    if args.init_from:
+        # Học tiếp: nạp weight cũ vào model vừa dựng. strict=True cố ý, vì nếu
+        # kiến trúc lệch dù chỉ một tensor thì im lặng bỏ qua sẽ cho ra một model
+        # nửa nạc nửa mỡ, và bạn chỉ phát hiện sau khi đã train xong.
+        prev = torch.load(args.init_from, map_location=device, weights_only=False)
+        model.load_state_dict(prev["state"], strict=True)
+        print(f"[init-from] nạp weight từ {args.init_from}")
     budget = model.param_budget()
     cfg = model.cfg
 
