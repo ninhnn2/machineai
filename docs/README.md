@@ -147,7 +147,7 @@ lỗi *lượng tử hoá* đo ở tầng 2. **Tách biến.**
 
 ---
 
-## Giới hạn — nói thẳng để không mất thời gian
+## Giới hạn của tài liệu này
 
 - **Model là TinyStories.** Nó VIẾT TIẾP truyện, không TRẢ LỜI câu hỏi. Giới hạn ở
   core 1.5M tham số, không phải ở runtime hay PLE.

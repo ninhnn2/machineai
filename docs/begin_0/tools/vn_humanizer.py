@@ -94,7 +94,21 @@ CHUYEN_DOAN = [
     "đầu tiên", "tiếp theo", "cuối cùng",
 ]
 
-MAX_DIEM = {"sao_rong": 25, "rao_don": 15, "ket_sao": 10,
+
+# ---------------------------------------------------------------------------
+# 5. GIẢ BỘ THẲNG THẮN
+#
+# Tic đặc trưng của văn AI: tuyên bố rằng mình sắp nói thật, thay vì nói luôn.
+# Người viết thật chỉ nói điều cần nói. Câu "nói thẳng là X" gần như luôn rút
+# gọn được thành "X" mà không mất gì, đó là dấu hiệu nó chỉ để lấy giọng.
+# ---------------------------------------------------------------------------
+GIA_THANG = [
+    "nói thẳng", "nói thật", "thành thật mà nói", "thú thật",
+    "phải nói rằng", "phải thừa nhận rằng", "nói cho công bằng",
+    "nói không ngoa", "chẳng giấu gì", "thẳng thắn mà nói",
+]
+
+MAX_DIEM = {"sao_rong": 20, "rao_don": 15, "ket_sao": 10, "gia_thang": 5,
             "chuyen_doan": 10, "nhip_cau": 20, "in_dam": 10, "gach_ngang": 10}
 
 MAU_AI = """Trong bối cảnh hiện nay, trí tuệ nhân tạo đóng vai trò then chốt và
@@ -126,18 +140,29 @@ def boc_van_xuoi(text):
     return text
 
 
-def _dem_cum(text_low, cum_list):
+def _dem_cum(text_low, cum_list, dau_cau_only=False):
+    """dau_cau_only: chỉ tính khi cụm MỞ ĐẦU một câu.
+
+    Cần thiết cho nhóm "giả bộ thẳng thắn". "Nói thẳng là X" ở đầu câu là tic
+    của người viết; còn "Comment trong code nói thẳng: ..." chỉ là mô tả một
+    comment, hoàn toàn hợp lệ. Không phân biệt thì công cụ báo nhầm, và một
+    công cụ hay báo nhầm thì không ai còn tin nữa.
+    """
     hits = []
     for c in cum_list:
-        n = text_low.count(c)
+        if dau_cau_only:
+            n = len(re.findall(r"(?:^|[.!?:;\n]\s*|^\s*[-*]\s*)" + re.escape(c),
+                               text_low, flags=re.M))
+        else:
+            n = text_low.count(c)
         if n:
             hits.append((c, n))
     return sorted(hits, key=lambda x: -x[1])
 
 
-def cham_tu_vung(t, low, cum_list, max_diem, moc):
+def cham_tu_vung(t, low, cum_list, max_diem, moc, dau_cau_only=False):
     """moc = số lần / 1000 từ để mất hết điểm."""
-    hits = _dem_cum(low, cum_list)
+    hits = _dem_cum(low, cum_list, dau_cau_only)
     tong = sum(n for _, n in hits)
     so_tu = max(1, len(re.findall(r"\S+", t)))
     mat_do = tong / (so_tu / 1000)
@@ -184,6 +209,8 @@ def cham(text):
         "sao_rong":   cham_tu_vung(t, low, SAO_RONG,   MAX_DIEM["sao_rong"],   6),
         "rao_don":    cham_tu_vung(t, low, RAO_DON,    MAX_DIEM["rao_don"],    4),
         "ket_sao":    cham_tu_vung(t, low, KET_SAO,    MAX_DIEM["ket_sao"],    2),
+        "gia_thang":  cham_tu_vung(t, low, GIA_THANG,  MAX_DIEM["gia_thang"],  1.5,
+                                  dau_cau_only=True),
         "chuyen_doan": cham_tu_vung(t, low, CHUYEN_DOAN, MAX_DIEM["chuyen_doan"], 20),
         "nhip_cau":   cham_nhip_cau(t),
         "in_dam":     cham_in_dam(t),
@@ -194,7 +221,7 @@ def cham(text):
             "so_tu_van_xuoi": len(re.findall(r"\S+", t))}
 
 
-TEN = {"sao_rong": "Từ sáo rỗng", "rao_don": "Rào đón", "ket_sao": "Kết bài sáo",
+TEN = {"sao_rong": "Từ sáo rỗng", "rao_don": "Rào đón", "ket_sao": "Kết bài sáo", "gia_thang": "Giả bộ thẳng thắn",
        "chuyen_doan": "Chuyển đoạn máy móc", "nhip_cau": "Nhịp câu dài ngắn",
        "in_dam": "In đậm quá tay", "gach_ngang": "Gạch ngang"}
 
@@ -213,7 +240,7 @@ def in_bao_cao(kq, nguon):
         print(f"  {TEN[k]:<22} {v['diem']:>2}/{v['max']:<2} {bar}")
     print("\n  ── Cụm bắt được ───────────────────────────")
     co = False
-    for k in ("sao_rong", "rao_don", "ket_sao", "chuyen_doan"):
+    for k in ("sao_rong", "rao_don", "ket_sao", "gia_thang", "chuyen_doan"):
         for cum, n in kq["muc"][k].get("cum", []):
             print(f'  {n:>2}x  "{cum}"   [{TEN[k]}]')
             co = True
