@@ -1,7 +1,22 @@
 # Running a 28.9M parameter LLM on an $8 microcontroller
 
+> **This is a copy, not the original.** PLE TinyLM was written by
+> **Viacheslav Sierbov (slvDev)** and is MIT licensed. Everything below this note,
+> including the first person voice, is the original author's text kept as it was.
+> The architecture, the idea of putting Per-Layer Embeddings on an MCU, the C
+> runtime and the on-board measurements are all theirs.
+>
+> I keep this copy to read, run and learn from. My own additions are the Vietnamese
+> course in [`docs/begin_0/`](docs/begin_0/), the multi-platform build fixes, and
+> the tooling under `data/make_probe.py`, `src/probe_check.py`, `src/trace_token.py`
+> and `src/eval_loss.py`. Notes from reading it are published at
+> [fanning.vn/study_ai](https://fanning.vn/study_ai/).
+>
+> Original author: [𝕏 slvDev](https://x.com/slvDev) ·
+> [LinkedIn](https://www.linkedin.com/in/slvdev/) · they were open to work when
+> this was written, so if the engineering below impresses you, that is who to talk to.
+
 <p align="center">
-  Open to Work &nbsp;·&nbsp;
   <a href="https://x.com/slvDev">𝕏 slvDev</a> &nbsp;·&nbsp;
   <a href="https://www.linkedin.com/in/slvdev/">LinkedIn</a>
 </p>
@@ -65,13 +80,13 @@ parameter model can say.
 Model đã train **được commit sẵn** trong [`firmware/model/`](firmware/model/README.md)
 (1.87 MB, 4-bit) cùng `golden.txt`, nên clone về là kiểm chứng được ngay, không cần
 train lại. Lưu ý bản commit sẵn là cấu hình nhỏ 3.6M để lặp nhanh, **không phải** bản
-28.9M ở RESULTS.md — khác biệt liệt kê đầy đủ trong
+28.9M ở RESULTS.md. Khác biệt liệt kê đầy đủ trong
 [`firmware/model/README.md`](firmware/model/README.md).
 
 | Nền tảng | Train / export (PyTorch) | Runtime C/CUDA | Trạng thái |
 |---|---|---|---|
-| **x86-64 Linux** | `uv run` — CPU hoặc CUDA | `host_verify`, `samples/cpu` (AVX2) | đã đo, xem bảng thang tối ưu dưới |
-| **macOS Apple Silicon** (M1–M4) | `uv run` — **MPS**, không cần cài gì thêm | `host_verify`, `samples/cpu` (NEON+dotprod) | đã đo trên M3, xem ghi chú bên dưới |
+| **x86-64 Linux** | `uv run`, CPU hoặc CUDA | `host_verify`, `samples/cpu` (AVX2) | đã đo, xem bảng thang tối ưu dưới |
+| **macOS Apple Silicon** (M1-M4) | `uv run`, **MPS**, không cần cài gì thêm | `host_verify`, `samples/cpu` (NEON+dotprod) | đã đo trên M3, xem ghi chú bên dưới |
 | **NVIDIA Jetson** (Orin, Orin Nano Super) | `firmware/jetson/run.sh` (Docker) hoặc `uv run` thẳng | `firmware/jetson` (CUDA, `ARCH` tự dò) | xem [`JETSON.md`](firmware/jetson/JETSON.md) |
 | **ESP32-S3** | không train trên board | `firmware/esp32_llm` (Xtensa LX7) | xem [README của firmware](firmware/esp32_llm/README.md) |
 
@@ -87,7 +102,7 @@ NVIDIA. Đo thật: train cấu hình 4096/2000-bước hết 21,3 phút trên M
 
 **macOS cần biết hai chỗ:** `uname -m` trên đây trả về `arm64` chứ không phải
 `aarch64`, và Apple clang không nhận `-fopenmp` trần (cần `brew install libomp`).
-Cả hai đã được [`samples/cpu/Makefile`](samples/cpu/Makefile) tự dò và xử lý — thiếu
+Cả hai đã được [`samples/cpu/Makefile`](samples/cpu/Makefile) tự dò và xử lý; thiếu
 libomp thì nó vẫn build, chỉ chạy 1 luồng và nói rõ điều đó.
 
 ## Running it yourself
@@ -158,8 +173,8 @@ finds that on a hybrid P-core/E-core CPU, using every logical core is 700× *slo
 than using eight. Neither result is guessable; both are one `make` away.
 
 Hai cột trên đo trên output head của model **28.9M** (`[32768 x 96]`). Chạy cùng
-lệnh với `model.bin` commit sẵn trong repo thì head chỉ còn `[4096 x 128]` — nhỏ hơn
-8 lần — nên **các con số không so trực tiếp được**. Ví dụ trên MacBook Pro M3 với
+lệnh với `model.bin` commit sẵn trong repo thì head chỉ còn `[4096 x 128]`, nhỏ hơn
+8 lần, nên **các con số không so trực tiếp được**. Ví dụ trên MacBook Pro M3 với
 head nhỏ đó: int8 staged 12.9×, +NEON 22.6×, nhưng **+threads tụt xuống 14.5×** vì
 việc mỗi lần gọi (13,5 us) chưa đủ trả cho chi phí mở vùng song song (13,3 us). Cùng
 bài học với cột ARM, chỉ đến từ một hướng khác: song song có giá cố định, và giá đó
