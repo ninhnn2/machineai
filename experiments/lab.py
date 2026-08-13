@@ -115,16 +115,20 @@ def sweep(a):
         k, v = kv.split("=", 1)
         overrides[k] = cast(v)
 
-    # kỷ luật 1: chỉ một biến được đổi so với baseline
-    changed = {k for k, v in overrides.items() if BASELINE.get(k) != v}
-    changed.discard(var)
-    if changed and not a.allow_multi:
-        sys.exit(f"sweep này đổi nhiều hơn một biến: {var} và {sorted(changed)}.\n"
-                 f"Nếu cố ý (ví dụ giữ tổng số token không đổi khi đổi batch) thì "
-                 f"chạy lại với --allow-multi, và ghi lý do vào --question.")
-    if changed:
-        print(f"  ! đổi nhiều biến cùng lúc: {var} + {sorted(changed)}. "
-              f"Kết quả chỉ đọc được nếu --question nói rõ vì sao.\n")
+    # Kỷ luật 1, phiên bản đúng: điều phải giữ là TRONG MỘT SWEEP chỉ có một biến
+    # thay đổi giữa các run. Hạ steps xuống cho cả bốn run để chạy nhanh vẫn là
+    # thí nghiệm có kiểm soát, vì mọi run chịu chung điều kiện đó.
+    #
+    # Bản đầu tôi viết luật thành "khác baseline thì chặn", và nó chặn ngay một
+    # sweep hoàn toàn hợp lệ. Cái phải làm không phải chặn, mà là GHI LẠI độ lệch
+    # so với baseline, để sau này không ai so nhầm val của sweep này với val của
+    # dòng baseline 11.000 bước.
+    deviation = {k: v for k, v in overrides.items() if BASELINE.get(k) != v}
+    deviation.pop(var, None)
+    if deviation:
+        print(f"  ghi chú: sweep này lệch baseline ở {deviation}.")
+        print(f"  Trong sweep vẫn chỉ {var} thay đổi nên so nội bộ hợp lệ, nhưng")
+        print(f"  KHÔNG so trực tiếp val ở đây với dòng baseline được.\n")
 
     print(f"sweep {var} = {values}")
     print(f"câu hỏi   : {a.question}")
@@ -139,6 +143,7 @@ def sweep(a):
         print(f"  [{var}={v}] đang chạy ...", flush=True)
         row, log = run_one(cfg, tag, a.data_suffix, a.timeout)
         row.update(exp=a.name, var=var, value=v, tag=tag, config=cfg,
+                   deviation=deviation,
                    question=a.question, hypothesis=a.hypothesis,
                    ts=time.strftime("%Y-%m-%d %H:%M"))
         rows.append(row)
