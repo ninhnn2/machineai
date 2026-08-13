@@ -83,7 +83,7 @@ static int sample(float *logits, int V, float temperature, int top_k,
 // model hội thoại có ngữ cảnh nhiều lượt.
 static void run_once(ModelD *d, ScratchD *s, Cfg *c, float *logits,
                      const char *text, int n_gen, float temp, int top_k,
-                     unsigned *seed) {
+                     unsigned *seed, int use_graph) {
   int ids[512];
   int plen = bpe_encode(text, ids, 512);
   if (plen < 0) { fprintf(stderr, "prompt quá dài\n"); return; }
@@ -97,26 +97,45 @@ static void run_once(ModelD *d, ScratchD *s, Cfg *c, float *logits,
     llm_cuda_forward(d, tok, pos++, s, NULL, NULL);
   }
 
+  // Đường decode qua CUDA Graph. bench_cuda đo được 117 launch/token, và khoảng
+  // một nửa thời gian mỗi token là chi phí phóng kernel thuần. Graph ghi cả chuỗi
+  // một lần rồi mỗi token chỉ còn 2 launch (k_set_step + graph).
+  //
+  // Graph chỉ dựng cho phần decode, không cho prefill: prefill chạy trước khi
+  // biết prompt dài bao nhiêu, và mỗi token prompt cũng đi qua đúng thân đó nên
+  // dựng graph sớm không thêm được gì.
+  LlmGraph g; memset(&g, 0, sizeof(g));
+  if (use_graph) llm_cuda_graph_build(d, s, &g);
+
   cudaEvent_t t0, t1;
   CUDA_CHECK(cudaEventCreate(&t0)); CUDA_CHECK(cudaEventCreate(&t1));
   CUDA_CHECK(cudaEventRecord(t0));
   int steps = 0;
   for (int step = 0; step < n_gen && pos < c->seq_len; step++) {
+    // g->stream tạo bằng cudaStreamNonBlocking nên nó KHÔNG tự đồng bộ với
+    // stream mặc định mà cudaMemcpy dưới đây chạy trên. Thiếu dòng sync này,
+    // logits đọc được là của token TRƯỚC, và văn bản sinh ra vẫn trông hợp lý
+    // nên lỗi rất khó thấy.
+    if (use_graph) llm_cuda_graph_sync(&g);
     CUDA_CHECK(cudaMemcpy(logits, s->logits, c->vocab * sizeof(float),
                           cudaMemcpyDeviceToHost));
     tok = sample(logits, c->vocab, temp, top_k, seed);
     emit(tok);
-    llm_cuda_forward(d, tok, pos++, s, NULL, NULL);
+    if (use_graph) llm_cuda_graph_step(s, &g, tok, pos++);
+    else           llm_cuda_forward(d, tok, pos++, s, NULL, NULL);
     steps++;
   }
+  if (use_graph) llm_cuda_graph_sync(&g);
   CUDA_CHECK(cudaEventRecord(t1));
   CUDA_CHECK(cudaEventSynchronize(t1));
+  if (use_graph) llm_cuda_graph_destroy(&g);
   float ms; cudaEventElapsedTime(&ms, t0, t1);
   cudaEventDestroy(t0); cudaEventDestroy(t1);
 
   printf("\n");
-  fprintf(stderr, "[%d prompt + %d sinh | %.1f tok/s | %.3f ms/token]\n",
-          plen, steps, steps * 1000.f / ms, ms / steps);
+  fprintf(stderr, "[%d prompt + %d sinh | %.1f tok/s | %.3f ms/token | %s]\n",
+          plen, steps, steps * 1000.f / ms, ms / steps,
+          use_graph ? "graph" : "eager");
 }
 
 static void usage(void) {
@@ -127,13 +146,14 @@ static void usage(void) {
     "  -t T        temperature   (0.8; 0 = greedy, tất định)\n"
     "  -k K        top_k         (40)\n"
     "  -s S        seed          (1234)\n"
-    "  -i          chế độ tương tác: gõ prompt, Enter; dòng trống hoặc Ctrl-D để thoát\n");
+    "  -i          chế độ tương tác: gõ prompt, Enter; dòng trống hoặc Ctrl-D để thoát\n"
+    "  --no-graph  tắt CUDA Graph, quay về 117 launch/token (để so tốc độ)\n");
 }
 
 int main(int argc, char **argv) {
   const char *binp = "../model/model.bin";
   const char *prompt = "Once upon a time";
-  int n_gen = 200, top_k = 40, interactive = 0;
+  int n_gen = 200, top_k = 40, interactive = 0, use_graph = 1;
   float temp = 0.8f;
   unsigned seed = 1234u;
 
@@ -145,6 +165,7 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[i], "-k") && i + 1 < argc) { top_k = atoi(argv[++i]); continue; }
     if (!strcmp(argv[i], "-s") && i + 1 < argc) { seed = (unsigned)atoi(argv[++i]); continue; }
     if (!strcmp(argv[i], "-i")) { interactive = 1; continue; }
+    if (!strcmp(argv[i], "--no-graph")) { use_graph = 0; continue; }
     if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) { usage(); return 0; }
     fprintf(stderr, "tham số lạ: %s\n", argv[i]); usage(); return 1;
   }
@@ -172,7 +193,7 @@ int main(int argc, char **argv) {
 
   if (!interactive) {
     printf("\n>>> ");
-    run_once(&d, &s, c, logits, prompt, n_gen, temp, top_k, &seed);
+    run_once(&d, &s, c, logits, prompt, n_gen, temp, top_k, &seed, use_graph);
     return 0;
   }
 
@@ -188,7 +209,7 @@ int main(int argc, char **argv) {
     line[strcspn(line, "\r\n")] = 0;
     if (line[0] == 0) break;
     printf("\n>>> ");
-    run_once(&d, &s, c, logits, line, n_gen, temp, top_k, &seed);
+    run_once(&d, &s, c, logits, line, n_gen, temp, top_k, &seed, use_graph);
     printf("\n");
   }
   fprintf(stderr, "tạm biệt\n");
